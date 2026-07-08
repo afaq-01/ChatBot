@@ -9,7 +9,16 @@ const app = express();
 
 
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "https://chat-bot-tau-sand.vercel.app"
+    ],
+    credentials: true
+  })
+);
 app.use(express.json());
 
 //import Api and saving in variable

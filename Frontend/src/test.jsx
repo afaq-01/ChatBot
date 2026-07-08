@@ -551,10 +551,9 @@ function Composer({ onSend, disabled, isStreaming, onStop }) {
 // Gemini. The backend takes { prompt } and returns { text } as a single
 // (non-streaming) JSON response.
 // ---------------------------------------------------------------------------
-const API_BASE_URL = "http://localhost:5000";
 
 async function sendChatMessage({ prompt, signal }) {
-  const response = await fetch(`${API_BASE_URL}/api/chat`, {
+  const response = await fetch("https://chatbot-production-005c.up.railway.app/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt }),
