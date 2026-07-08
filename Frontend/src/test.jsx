@@ -556,7 +556,7 @@ function Composer({ onSend, disabled, isStreaming, onStop }) {
 
 
 async function sendChatMessage({ prompt, signal }) {
-  const response = await fetch("https://chatbot-production-005c.up.railway.app/api/chat"/api/chat, {
+  const response = await fetch("https://chatbot-production-005c.up.railway.app/api/chat/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt }),
