@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useUser, useClerk, UserButton } from "@clerk/clerk-react";
 import {
   Plus,
   MessageSquare,
@@ -147,11 +148,10 @@ function NavbarLogo() {
 function SidebarNavItem({ icon: Icon, label, active }) {
   return (
     <button
-      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-        active
-          ? "bg-[var(--surface-1)] text-[var(--text-heading)]"
-          : "text-[var(--text-muted)] hover:bg-[var(--bg-page)] hover:text-[var(--text-heading)]"
-      }`}
+      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${active
+        ? "bg-[var(--surface-1)] text-[var(--text-heading)]"
+        : "text-[var(--text-muted)] hover:bg-[var(--bg-page)] hover:text-[var(--text-heading)]"
+        }`}
     >
       <Icon size={17} strokeWidth={1.75} />
       {label}
@@ -160,6 +160,8 @@ function SidebarNavItem({ icon: Icon, label, active }) {
 }
 
 function Sidebar({ open, onToggle, conversations, activeId, onSelect, onNewChat }) {
+  const { openSignIn, signOut } = useClerk();
+  const { user, isLoaded } = useUser();
   return (
     <aside
       className={`fixed inset-y-0 left-0 z-40 h-full w-[260px] sm:w-[280px] lg:w-[300px] shrink-0 bg-[var(--bg-sidebar)] flex flex-col py-4 px-3
@@ -207,9 +209,8 @@ function Sidebar({ open, onToggle, conversations, activeId, onSelect, onNewChat 
           <button
             key={c.id}
             onClick={() => onSelect(c.id)}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors ${
-              c.id === activeId ? "bg-[var(--surface-1)]" : "hover:bg-[var(--bg-page)]"
-            }`}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors ${c.id === activeId ? "bg-[var(--surface-1)]" : "hover:bg-[var(--bg-page)]"
+              }`}
           >
             <span className="flex-1 min-w-0 text-[13px] text-[var(--text-body)] truncate">
               {c.title}
@@ -219,17 +220,15 @@ function Sidebar({ open, onToggle, conversations, activeId, onSelect, onNewChat 
         ))}
       </div>
 
-      <div className="mt-4 pt-3 border-t border-[var(--border)] flex items-center gap-2.5 px-1 min-w-[220px]">
-        <img
-          src="https://i.pravatar.cc/64?img=13"
-          alt="Aman Verma"
-          className="w-8 h-8 rounded-full object-cover shrink-0"
-        />
-        <div className="flex-1 min-w-0">
-          <div className="text-[var(--text-heading)] text-sm font-medium truncate">Aman Verma</div>
-          <div className="text-[var(--text-faint)] text-xs truncate">aman.verma@example.com</div>
-        </div>
-        <ChevronDown size={15} className="text-[var(--text-faint)] shrink-0" />
+      <div className="mt-4 pt-3 border-t border-[var(--border)] flex items-center gap-2.5 px-1 min-w-[220px] flex justify-center ">
+        {
+          user && isLoaded ? <>
+            <UserButton />
+            <h1 className="text-white">{user.fullName}</h1>
+          </> :
+            <button className="h-[35px] w-[60px] bg-linear-to-br from-blue-600 to-purple-500  rounded-md" onClick={() => openSignIn()}>Login</button>
+
+        }
       </div>
     </aside>
   );
@@ -239,14 +238,16 @@ function Sidebar({ open, onToggle, conversations, activeId, onSelect, onNewChat 
 // HEADER
 // ---------------------------------------------------------------------------
 function Header({ sidebarOpen, onToggleSidebar, theme, onToggleTheme }) {
+  const { openSignIn, signOut } = useClerk();
+  const { user, isLoaded } = useUser();
   return (
     <header className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3.5 sm:py-4">
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center gap-2 min-w-0 ">
         {!sidebarOpen && (
           <button
             onClick={onToggleSidebar}
             aria-label="Show sidebar"
-            className="w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--surface-1)] hover:text-[var(--text-heading)] transition-colors"
+            className="cursor-pointer w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--surface-1)] hover:text-[var(--text-heading)] transition-colors"
           >
             <Menu size={18} strokeWidth={1.75} />
           </button>
@@ -255,7 +256,7 @@ function Header({ sidebarOpen, onToggleSidebar, theme, onToggleTheme }) {
           <div className="flex items-center h-8 shrink-0">
             <NavbarLogo />
           </div>
-          <button className="flex items-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-heading)] px-1.5 py-1 rounded-md hover:bg-[var(--surface-1)] transition-colors">
+          <button className="cursor-pointer flex items-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-heading)] px-1.5 py-1 rounded-md hover:bg-[var(--surface-1)] transition-colors">
             <ChevronDown size={14} />
           </button>
         </div>
@@ -268,16 +269,18 @@ function Header({ sidebarOpen, onToggleSidebar, theme, onToggleTheme }) {
           onClick={onToggleTheme}
           aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          className="flex w-9 h-9 rounded-lg items-center justify-center text-[var(--text-muted)] hover:bg-[var(--surface-1)] hover:text-[var(--text-heading)] transition-colors"
+          className="cursor-pointer flex w-9 h-9 rounded-lg items-center justify-center text-[var(--text-muted)] hover:bg-[var(--surface-1)] hover:text-[var(--text-heading)] transition-colors"
         >
           {theme === "dark" ? <Sun size={17} strokeWidth={1.75} /> : <Moon size={17} strokeWidth={1.75} />}
         </button>
-        <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 ml-1">
-          <img
-            src="https://i.pravatar.cc/64?img=13"
-            className="w-full h-full rounded-full object-cover"
-            alt="avatar"
-          />
+        <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 ml-1 ">
+          {
+            user && isLoaded ? <>
+              <UserButton />
+            </> :
+              <h1 className="cursor-pointer" onClick={() => openSignIn()}>Login</h1>
+
+          }
         </div>
       </div>
     </header>
@@ -394,17 +397,15 @@ function MessageActions({ text }) {
       </button>
       <button
         onClick={() => setLiked((v) => (v === "up" ? null : "up"))}
-        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-          liked === "up" ? "text-[var(--text-heading)] bg-[var(--surface-1)]" : "text-[var(--text-faint)] hover:bg-[var(--surface-1)] hover:text-[var(--text-heading)]"
-        }`}
+        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${liked === "up" ? "text-[var(--text-heading)] bg-[var(--surface-1)]" : "text-[var(--text-faint)] hover:bg-[var(--surface-1)] hover:text-[var(--text-heading)]"
+          }`}
       >
         <ThumbsUp size={15} strokeWidth={1.75} />
       </button>
       <button
         onClick={() => setLiked((v) => (v === "down" ? null : "down"))}
-        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-          liked === "down" ? "text-[var(--text-heading)] bg-[var(--surface-1)]" : "text-[var(--text-faint)] hover:bg-[var(--surface-1)] hover:text-[var(--text-heading)]"
-        }`}
+        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${liked === "down" ? "text-[var(--text-heading)] bg-[var(--surface-1)]" : "text-[var(--text-faint)] hover:bg-[var(--surface-1)] hover:text-[var(--text-heading)]"
+          }`}
       >
         <ThumbsDown size={15} strokeWidth={1.75} />
       </button>
@@ -422,6 +423,8 @@ function ChatArea({ messages, isStreaming, error, endRef }) {
           </div>
           <h2 className="text-[var(--text-heading)] text-xl font-semibold mb-1">How can I help you today?</h2>
           <p className="text-[var(--text-faint)] text-sm">Ask me anything — I'm connected to the backend.</p>
+          <p className="text-[var(--text-faint)] text-sm">Build BY : Afaq Ahmad</p>
+
         </div>
       </div>
     );
@@ -527,11 +530,10 @@ function Composer({ onSend, disabled, isStreaming, onStop }) {
               <button
                 onClick={submit}
                 disabled={!value.trim()}
-                className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-colors ${
-                  value.trim()
-                    ? "bg-[var(--send-bg)] text-[var(--send-text)]"
-                    : "bg-[var(--surface-1)] text-[var(--text-faint)]"
-                }`}
+                className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-colors ${value.trim()
+                  ? "bg-[var(--send-bg)] text-[var(--send-text)]"
+                  : "bg-[var(--surface-1)] text-[var(--text-faint)]"
+                  }`}
               >
                 <ArrowUp size={18} strokeWidth={2.25} />
               </button>
@@ -552,8 +554,9 @@ function Composer({ onSend, disabled, isStreaming, onStop }) {
 // (non-streaming) JSON response.
 // ---------------------------------------------------------------------------
 
+
 async function sendChatMessage({ prompt, signal }) {
-  const response = await fetch("https://chatbot-production-005c.up.railway.app/api/chat", {
+  const response = await fetch("https://chatbot-production-005c.up.railway.app/api/chat"/api/chat, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt }),
@@ -569,7 +572,7 @@ async function sendChatMessage({ prompt, signal }) {
 }
 
 // ---------------------------------------------------------------------------
-export default function NexoraChatUI() {
+export default function Home_Page() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const toggleSidebar = () => setSidebarOpen((v) => !v);
 
@@ -666,9 +669,8 @@ export default function NexoraChatUI() {
       <div
         onClick={toggleSidebar}
         aria-hidden="true"
-        className={`fixed inset-0 bg-black/50 z-30 transition-opacity duration-300 ease-in-out ${
-          sidebarOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-        }`}
+        className={`fixed inset-0 bg-black/50 z-30 transition-opacity duration-300 ease-in-out ${sidebarOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+          }`}
       />
 
       <main className="flex-1 flex flex-col min-w-0 h-full">
