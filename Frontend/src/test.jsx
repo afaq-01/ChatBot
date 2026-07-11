@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import axios from 'axios';
 import { useUser, useClerk, UserButton } from "@clerk/clerk-react";
 import {
   Plus,
@@ -13,6 +14,7 @@ import {
   Sun,
   ChevronDown,
   Copy,
+  Check, // ADD THIS
   ThumbsUp,
   ThumbsDown,
   Paperclip,
@@ -24,6 +26,8 @@ import {
   Menu,
   SquarePen,
   Square,
+   Mic,
+  MicOff 
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -209,13 +213,18 @@ function Sidebar({ open, onToggle, conversations, activeId, onSelect, onNewChat 
           <button
             key={c.id}
             onClick={() => onSelect(c.id)}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors ${c.id === activeId ? "bg-[var(--surface-1)]" : "hover:bg-[var(--bg-page)]"
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors ${c.id === activeId
+              ? "bg-[var(--surface-1)]"
+              : "hover:bg-[var(--bg-page)]"
               }`}
           >
             <span className="flex-1 min-w-0 text-[13px] text-[var(--text-body)] truncate">
               {c.title}
             </span>
-            <span className="text-[11px] text-[var(--text-faint)] shrink-0">{c.time}</span>
+
+            <span className="text-[11px] text-[var(--text-faint)] shrink-0">
+              {c.time}
+            </span>
           </button>
         ))}
       </div>
@@ -320,11 +329,14 @@ function BotBubble({ children }) {
   );
 }
 
-function UserBubble({ text }) {
+function UserBubble({ text, imagePreview }) {
   return (
     <div className="flex justify-end">
       <div className="max-w-[85%] sm:max-w-[70%] bg-[var(--surface-2)] rounded-3xl px-4 sm:px-5 py-2.5 sm:py-3 text-[var(--text-body)]">
-        <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{text}</p>
+        {imagePreview && (
+          <img src={imagePreview} alt="attachment" className="rounded-xl mb-2 max-h-48 object-cover" />
+        )}
+        {text && <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{text}</p>}
       </div>
     </div>
   );
@@ -342,7 +354,9 @@ function TypingDots() {
 
 // Minimal markdown-ish renderer: paragraphs + fenced code blocks + inline code.
 function MessageContent({ text }) {
+  const [copiedIndex, setCopiedIndex] = useState(null);
   const parts = text.split(/```/g);
+
   return (
     <div className="text-[15px] text-[var(--text-body)] leading-relaxed space-y-3">
       {parts.map((chunk, i) => {
@@ -356,11 +370,24 @@ function MessageContent({ text }) {
               <div className="flex items-center justify-between px-4 py-2 bg-[#2a2a2a]">
                 <span className="text-xs text-gray-400 font-mono">{lang || "code"}</span>
                 <button
-                  onClick={() => navigator.clipboard && navigator.clipboard.writeText(code)}
+                  onClick={() => {
+                    if (navigator.clipboard) navigator.clipboard.writeText(code);
+                    setCopiedIndex(i);
+                    setTimeout(() => setCopiedIndex(null), 1500);
+                  }}
                   className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-100 transition-colors"
                 >
-                  <Copy size={13} />
-                  Copy
+                  {copiedIndex === i ? (
+                    <>
+                      <Check size={13} className="text-green-500" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={13} />
+                      Copy
+                    </>
+                  )}
                 </button>
               </div>
               <pre className="px-4 py-3 text-[13px] leading-6 font-mono overflow-x-auto text-gray-200 whitespace-pre-wrap">
@@ -378,42 +405,72 @@ function MessageContent({ text }) {
     </div>
   );
 }
-
-function MessageActions({ text }) {
-  const [liked, setLiked] = useState(null); // null | 'up' | 'down'
+// ---------------------------------------------------------------------------
+// MESSAGE ACTIONS — copy + working like/dislike.
+// `feedback` is the persisted value on the message ("up" | "down" | null),
+// lifted up so it survives re-renders and can be hydrated from history.
+// `onFeedback(value)` is called with the NEW value the user wants; the
+// parent is responsible for the optimistic update + API call + rollback.
+// ---------------------------------------------------------------------------
+function MessageActions({ text, feedback, onFeedback }) {
   const [copied, setCopied] = useState(false);
+  const [pending, setPending] = useState(false);
+
+  const handleFeedback = async (value) => {
+    if (pending || !onFeedback) return;
+    const next = feedback === value ? null : value; // clicking the active one again clears it
+    setPending(true);
+    try {
+      await onFeedback(next);
+    } finally {
+      setPending(false);
+    }
+  };
+
   return (
     <div className="flex items-center gap-1 pt-1 -ml-1.5">
       <button
         onClick={() => {
           if (navigator.clipboard) navigator.clipboard.writeText(text);
           setCopied(true);
-          setTimeout(() => setCopied(false), 1200);
+          setTimeout(() => setCopied(false), 1500);
         }}
         title={copied ? "Copied!" : "Copy"}
         className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--text-faint)] hover:bg-[var(--surface-1)] hover:text-[var(--text-heading)] transition-colors"
       >
-        <Copy size={15} strokeWidth={1.75} />
+        {copied ? (
+          <Check size={15} strokeWidth={1.75} className="text-green-500" />
+        ) : (
+          <Copy size={15} strokeWidth={1.75} />
+        )}
       </button>
       <button
-        onClick={() => setLiked((v) => (v === "up" ? null : "up"))}
-        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${liked === "up" ? "text-[var(--text-heading)] bg-[var(--surface-1)]" : "text-[var(--text-faint)] hover:bg-[var(--surface-1)] hover:text-[var(--text-heading)]"
+        onClick={() => handleFeedback("up")}
+        disabled={pending}
+        title="Good response"
+        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${feedback === "up"
+          ? "text-[var(--text-heading)] bg-[var(--surface-1)]"
+          : "text-[var(--text-faint)] hover:bg-[var(--surface-1)] hover:text-[var(--text-heading)]"
           }`}
       >
-        <ThumbsUp size={15} strokeWidth={1.75} />
+        <ThumbsUp size={15} strokeWidth={1.75} fill={feedback === "up" ? "currentColor" : "none"} />
       </button>
       <button
-        onClick={() => setLiked((v) => (v === "down" ? null : "down"))}
-        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${liked === "down" ? "text-[var(--text-heading)] bg-[var(--surface-1)]" : "text-[var(--text-faint)] hover:bg-[var(--surface-1)] hover:text-[var(--text-heading)]"
+        onClick={() => handleFeedback("down")}
+        disabled={pending}
+        title="Bad response"
+        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${feedback === "down"
+          ? "text-[var(--text-heading)] bg-[var(--surface-1)]"
+          : "text-[var(--text-faint)] hover:bg-[var(--surface-1)] hover:text-[var(--text-heading)]"
           }`}
       >
-        <ThumbsDown size={15} strokeWidth={1.75} />
+        <ThumbsDown size={15} strokeWidth={1.75} fill={feedback === "down" ? "currentColor" : "none"} />
       </button>
     </div>
   );
 }
 
-function ChatArea({ messages, isStreaming, error, endRef }) {
+function ChatArea({ messages, isStreaming, error, endRef, onFeedback }) {
   if (messages.length === 0) {
     return (
       <div className="flex-1 overflow-y-auto px-4 sm:px-6 flex items-center justify-center">
@@ -436,7 +493,7 @@ function ChatArea({ messages, isStreaming, error, endRef }) {
         {messages.map((m, idx) => {
           const isLast = idx === messages.length - 1;
           if (m.role === "user") {
-            return <UserBubble key={m.id} text={m.text} />;
+            return <UserBubble key={m.id} text={m.text} imagePreview={m.imagePreview} />;
           }
           return (
             <BotBubble key={m.id}>
@@ -445,7 +502,13 @@ function ChatArea({ messages, isStreaming, error, endRef }) {
               ) : (
                 <>
                   <MessageContent text={m.text} />
-                  {m.text && <MessageActions text={m.text} />}
+                  {m.text && (
+                    <MessageActions
+                      text={m.text}
+                      feedback={m.feedback ?? null}
+                      onFeedback={(value) => onFeedback(m.id, value)}
+                    />
+                  )}
                 </>
               )}
             </BotBubble>
@@ -468,13 +531,70 @@ function ChatArea({ messages, isStreaming, error, endRef }) {
 // ---------------------------------------------------------------------------
 function Composer({ onSend, disabled, isStreaming, onStop }) {
   const [value, setValue] = useState("");
+  const [file, setFile] = useState(null);
+  const [isListening, setIsListening] = useState(false);
   const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const recognitionRef = useRef(null);
+
+  // Set up SpeechRecognition once on mount
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return; // browser doesn't support it (e.g. Firefox)
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onresult = (event) => {
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      setValue((prev) => {
+        // Replace only the "live" trailing portion, keep whatever was typed before listening started
+        const base = recognitionRef.current?.baseValue ?? "";
+        return (base ? base + " " : "") + transcript;
+      });
+    };
+
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error:", event.error);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognitionRef.current = recognition;
+  }, []);
+
+  const toggleListening = () => {
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      alert("Voice input isn't supported in this browser. Try Chrome or Edge.");
+      return;
+    }
+
+    if (isListening) {
+      recognition.stop();
+      setIsListening(false);
+    } else {
+      recognition.baseValue = value; // remember what was already typed
+      recognition.start();
+      setIsListening(true);
+    }
+  };
 
   const submit = () => {
     const trimmed = value.trim();
-    if (!trimmed || disabled) return;
-    onSend(trimmed);
+    if ((!trimmed && !file) || disabled) return;
+    if (isListening) recognitionRef.current?.stop();
+    onSend(trimmed, file);
     setValue("");
+    setFile(null);
   };
 
   const handleKeyDown = (e) => {
@@ -482,6 +602,26 @@ function Composer({ onSend, disabled, isStreaming, onStop }) {
       e.preventDefault();
       submit();
     }
+  };
+
+  const handleFileChange = (e) => {
+    const selected = e.target.files?.[0];
+    if (!selected) return;
+    if (!selected.type.startsWith("image/")) {
+      alert("Only image files are supported right now.");
+      return;
+    }
+    if (selected.size > 4 * 1024 * 1024) {
+      alert("Please choose an image under 4MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result.split(",")[1];
+      setFile({ name: selected.name, type: selected.type, base64 });
+    };
+    reader.readAsDataURL(selected);
+    e.target.value = "";
   };
 
   useEffect(() => {
@@ -495,45 +635,60 @@ function Composer({ onSend, disabled, isStreaming, onStop }) {
     <div className="px-4 sm:px-6 pb-5 sm:pb-6 pt-2">
       <div className="max-w-3xl mx-auto">
         <div className="rounded-[28px] bg-[var(--surface-2)] px-3 sm:px-4 py-2.5 sm:py-3">
+          {file && (
+            <div className="flex items-center gap-2 mb-2 px-1">
+              <img
+                src={`data:${file.type};base64,${file.base64}`}
+                alt={file.name}
+                className="w-10 h-10 rounded-lg object-cover border border-[var(--border)]"
+              />
+              <span className="text-xs text-[var(--text-muted)] truncate max-w-[160px]">{file.name}</span>
+              <button onClick={() => setFile(null)} className="text-xs text-[var(--text-faint)] hover:text-[var(--text-heading)] ml-1">
+                Remove
+              </button>
+            </div>
+          )}
           <textarea
             ref={textareaRef}
             rows={1}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Message Nexora..."
+            placeholder={isListening ? "Listening..." : "Message Nexora..."}
             className="w-full bg-transparent outline-none resize-none text-[var(--text-body)] placeholder:text-[var(--text-faint)] text-[15px] px-1.5 py-1.5 mb-1"
           />
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1 sm:gap-1.5 text-[var(--text-muted)] text-xs sm:text-sm">
-              <button className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-[var(--surface-1)] transition-colors">
+              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-[var(--surface-1)] transition-colors"
+              >
                 <Paperclip size={17} strokeWidth={1.75} />
               </button>
-              <button className="flex items-center gap-1.5 whitespace-nowrap hover:bg-[var(--surface-1)] transition-colors rounded-full px-3 py-2">
-                <Globe size={16} strokeWidth={1.75} />
-                <span className="hidden xs:inline">Search</span>
+              <button
+                onClick={toggleListening}
+                title={isListening ? "Stop listening" : "Voice input"}
+                className={`flex items-center justify-center w-9 h-9 rounded-full transition-colors ${
+                  isListening ? "bg-red-500/15 text-red-500" : "hover:bg-[var(--surface-1)]"
+                }`}
+              >
+                {isListening ? <MicOff size={17} strokeWidth={1.75} /> : <Mic size={17} strokeWidth={1.75} />}
               </button>
-              <button className="flex items-center gap-1.5 whitespace-nowrap hover:bg-[var(--surface-1)] transition-colors rounded-full px-3 py-2">
-                <Sparkles size={16} strokeWidth={1.75} />
-                <span className="hidden xs:inline">Enhance</span>
-              </button>
+              
+              
             </div>
             {isStreaming ? (
-              <button
-                onClick={onStop}
-                title="Stop generating"
-                className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center bg-[var(--send-bg)] text-[var(--send-text)] transition-colors"
-              >
+              <button onClick={onStop} title="Stop generating" className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center bg-[var(--send-bg)] text-[var(--send-text)] transition-colors">
                 <Square size={14} strokeWidth={2} fill="currentColor" />
               </button>
             ) : (
               <button
                 onClick={submit}
-                disabled={!value.trim()}
-                className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-colors ${value.trim()
-                  ? "bg-[var(--send-bg)] text-[var(--send-text)]"
-                  : "bg-[var(--surface-1)] text-[var(--text-faint)]"
-                  }`}
+                disabled={!value.trim() && !file}
+                className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-colors ${
+                  value.trim() || file ? "bg-[var(--send-bg)] text-[var(--send-text)]" : "bg-[var(--surface-1)] text-[var(--text-faint)]"
+                }`}
               >
                 <ArrowUp size={18} strokeWidth={2.25} />
               </button>
@@ -547,39 +702,60 @@ function Composer({ onSend, disabled, isStreaming, onStop }) {
     </div>
   );
 }
-
 // ---------------------------------------------------------------------------
 // API — talks to YOUR Express backend at /api/chat, which itself calls
-// Gemini. The backend takes { prompt } and returns { text } as a single
-// (non-streaming) JSON response.
+// Gemini. The backend takes { prompt, userId, conversationId } and returns
+// { text, conversationId, messageId } as a single (non-streaming) JSON response.
 // ---------------------------------------------------------------------------
 
-
-async function sendChatMessage({ prompt, signal }) {
-  const response = await fetch("https://chatbot-production-005c.up.railway.app/api/chat/", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt }),
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Request failed (${response.status})`);
+async function sendChatMessage({ prompt, userId, conversationId, file, signal }) {
+  try {
+    const response = await axios.post(
+      "http://localhost:5000/api/chat/",
+      { prompt, userId, conversationId, file },
+      { signal }
+    );
+    return response.data;
+  } catch (error) {
+    if (axios.isCancel(error) || error.name === "CanceledError") throw error;
+    const status = error.response?.status;
+    throw new Error(`Request failed${status ? ` (${status})` : ""}`);
   }
+}
 
-  const data = await response.json();
-  return data.text;
+// Sends like/dislike feedback for a message to the backend.
+// feedback is "up" | "down" | null (null clears any previous feedback).
+async function sendFeedback({ messageId, userId, feedback, signal }) {
+  try {
+    const response = await axios.post(
+      "http://localhost:5000/api/chat/feedback",
+      { messageId, userId, feedback },
+      { signal }
+    );
+    return response.data;
+  } catch (error) {
+    if (axios.isCancel(error) || error.name === "CanceledError") {
+      throw error;
+    }
+    const status = error.response?.status;
+    throw new Error(`Feedback request failed${status ? ` (${status})` : ""}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
 export default function Home_Page() {
+  // FIX: useUser() must be called at the top level of the component,
+  // not inside handleSend (that caused "Invalid hook call").
+  const { user, isLoaded } = useUser();
+  const userId = user ? user.id : null;
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const toggleSidebar = () => setSidebarOpen((v) => !v);
 
   const [theme, setTheme] = useState("dark");
   const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
 
-  // conversations: { id, title, time, messages: [{id, role, text}] }
+  // conversations: { id, title, time, messages: [{id, role, text, feedback?}] }
   const [conversations, setConversations] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -589,6 +765,27 @@ export default function Home_Page() {
 
   const activeConversation = conversations.find((c) => c.id === activeId) || null;
   const messages = activeConversation ? activeConversation.messages : [];
+
+  const getting_data = async () => {
+    try {
+      if (user && isLoaded) {
+        const response = await axios.post("http://localhost:5000/api/user-data", { userId });
+        console.log("RAW response.data:", response.data);
+        const chats = response.data || [];
+        const formatted = chats.map((c) => ({
+          ...c,
+          time: new Date(c.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+        }));
+        setConversations(formatted); // NOT [chats] — that was wrapping the whole array
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  useEffect(() => {
+    getting_data();
+  }, [user, isLoaded]);
 
   useEffect(() => {
     if (endRef.current) endRef.current.scrollIntoView({ behavior: "smooth" });
@@ -608,21 +805,36 @@ export default function Home_Page() {
     setError(null);
   };
 
-  const handleSend = async (text) => {
+  const handleSend = async (text, file) => {
     setError(null);
+
+    // FIX: guard on user/isLoaded from the top-level hook instead of
+    // calling useUser() here (which is not allowed inside a callback).
+    if (!isLoaded || !user) {
+      setError("Please sign in to chat.");
+      return;
+    }
+
     let convId = activeId;
 
     if (!convId) {
       convId = `conv-${Date.now()}`;
-      const title = text.length > 40 ? text.slice(0, 40) + "…" : text;
+      const title = text
+        ? (text.length > 40 ? text.slice(0, 40) + "…" : text)
+        : (file?.name || "New chat");
       const time = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
       setConversations((prev) => [{ id: convId, title, time, messages: [] }, ...prev]);
       setActiveId(convId);
     }
 
-    const userMsg = { id: `u-${Date.now()}`, role: "user", text };
+    const userMsg = {
+      id: `u-${Date.now()}`,
+      role: "user",
+      text: text || "",
+      imagePreview: file ? `data:${file.type};base64,${file.base64}` : null,
+    };
     const botMsgId = `a-${Date.now()}`;
-    const botMsg = { id: botMsgId, role: "assistant", text: "" };
+    const botMsg = { id: botMsgId, role: "assistant", text: "", feedback: null };
 
     updateConversation(convId, (c) => ({ ...c, messages: [...c.messages, userMsg, botMsg] }));
 
@@ -631,12 +843,21 @@ export default function Home_Page() {
     abortRef.current = controller;
 
     try {
-      // NOTE: the backend only accepts a single `prompt` string right now,
-      // so only the latest user message is sent (no multi-turn memory yet).
-      const replyText = await sendChatMessage({ prompt: text, signal: controller.signal });
+      const replyData = await sendChatMessage({
+        prompt: text || "Describe this image.",
+        userId: user.id,
+        conversationId: convId,
+        file,
+        signal: controller.signal,
+      });
+
       updateConversation(convId, (c) => ({
         ...c,
-        messages: c.messages.map((m) => (m.id === botMsgId ? { ...m, text: replyText } : m)),
+        messages: c.messages.map((m) =>
+          m.id === botMsgId
+            ? { ...m, id: `${replyData.messageId}-a`, text: replyData.text }
+            : m
+        ),
       }));
     } catch (err) {
       if (err.name !== "AbortError") {
@@ -650,6 +871,31 @@ export default function Home_Page() {
 
   const handleStop = () => {
     if (abortRef.current) abortRef.current.abort();
+  };
+  // Wires up the thumbs up/down buttons on each assistant message to the
+  // backend feedback endpoint, with an optimistic UI update + rollback on error.
+  const handleFeedback = async (messageId, value) => {
+    if (!activeId || !user) return;
+
+    const prevConversation = conversations.find((c) => c.id === activeId);
+    const prevMessage = prevConversation?.messages.find((m) => m.id === messageId);
+    const prevValue = prevMessage ? prevMessage.feedback ?? null : null;
+
+    // optimistic update
+    updateConversation(activeId, (c) => ({
+      ...c,
+      messages: c.messages.map((m) => (m.id === messageId ? { ...m, feedback: value } : m)),
+    }));
+
+    try {
+      await sendFeedback({ messageId, userId: user.id, feedback: value });
+    } catch (err) {
+      // rollback on failure
+      updateConversation(activeId, (c) => ({
+        ...c,
+        messages: c.messages.map((m) => (m.id === messageId ? { ...m, feedback: prevValue } : m)),
+      }));
+    }
   };
 
   return (
@@ -680,7 +926,13 @@ export default function Home_Page() {
           theme={theme}
           onToggleTheme={toggleTheme}
         />
-        <ChatArea messages={messages} isStreaming={isStreaming} error={error} endRef={endRef} />
+        <ChatArea
+          messages={messages}
+          isStreaming={isStreaming}
+          error={error}
+          endRef={endRef}
+          onFeedback={handleFeedback}
+        />
         <Composer
           onSend={handleSend}
           disabled={isStreaming}
