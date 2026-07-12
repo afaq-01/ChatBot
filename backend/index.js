@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { Chat_model } from "./model/Model.js";
 import { GoogleGenAI } from "@google/genai";
 import Connectdb from "./Config/mongodb_config.js";
+import mongoose from "mongoose";
 
 
 // Configuration 
@@ -108,8 +109,6 @@ app.post("/api/user-data", async (req, res) => {
   }
 });
 
-import mongoose from "mongoose";
-
 app.post("/api/chat/feedback", async (req, res) => {
   try {
     const { messageId, userId, feedback } = req.body;
@@ -137,6 +136,32 @@ app.post("/api/chat/feedback", async (req, res) => {
     res.json({ success: true, messageId, feedback: updated.feedback });
   } catch (error) {
     console.error("Feedback error:", error?.message || error);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+});
+
+// Deletes an entire conversation (every message document that shares its
+// conversationId) for the requesting user. Since each chat "turn" is stored
+// as its own Chat_model document grouped by conversationId, deleting a
+// conversation means deleteMany on that conversationId — scoped to userId
+// so one user can't delete another user's chat.
+app.delete("/api/chat/:conversationId", async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { userId } = req.body;
+
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    if (!conversationId) return res.status(400).json({ error: "conversationId is required" });
+
+    const result = await Chat_model.deleteMany({ conversationId, userId });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: "Conversation not found" });
+    }
+
+    res.json({ success: true, conversationId, deletedCount: result.deletedCount });
+  } catch (error) {
+    console.error("Delete conversation error:", error?.message || error);
     res.status(500).json({ error: "Something went wrong" });
   }
 });

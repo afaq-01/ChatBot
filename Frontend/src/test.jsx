@@ -7,7 +7,6 @@ import {
   Compass,
   BookOpen,
   History,
-  Bookmark,
   Search,
   Share,
   Moon,
@@ -26,16 +25,15 @@ import {
   Menu,
   SquarePen,
   Square,
+  Trash2,
    Mic,
   MicOff 
 } from "lucide-react";
 
+// Only "Chat" remains in the sidebar nav (Explore / Prompt Library / History /
+// Bookmarks were removed).
 const NAV_ITEMS = [
   { label: "Chat", icon: MessageSquare, active: true },
-  { label: "Explore", icon: Compass },
-  { label: "Prompt Library", icon: BookOpen },
-  { label: "History", icon: History },
-  { label: "Bookmarks", icon: Bookmark },
 ];
 
 // ---------------------------------------------------------------------------
@@ -163,9 +161,10 @@ function SidebarNavItem({ icon: Icon, label, active }) {
   );
 }
 
-function Sidebar({ open, onToggle, conversations, activeId, onSelect, onNewChat }) {
+function Sidebar({ open, onToggle, conversations, activeId, onSelect, onNewChat, onDelete }) {
   const { openSignIn, signOut } = useClerk();
   const { user, isLoaded } = useUser();
+
   return (
     <aside
       className={`fixed inset-y-0 left-0 z-40 h-full w-[260px] sm:w-[280px] lg:w-[300px] shrink-0 bg-[var(--bg-sidebar)] flex flex-col py-4 px-3
@@ -210,22 +209,37 @@ function Sidebar({ open, onToggle, conversations, activeId, onSelect, onNewChat 
           <p className="text-[13px] text-[var(--text-faint)] px-3 py-2">No conversations yet</p>
         )}
         {conversations.map((c) => (
-          <button
+          <div
             key={c.id}
-            onClick={() => onSelect(c.id)}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors ${c.id === activeId
+            className={`group w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${c.id === activeId
               ? "bg-[var(--surface-1)]"
               : "hover:bg-[var(--bg-page)]"
               }`}
           >
-            <span className="flex-1 min-w-0 text-[13px] text-[var(--text-body)] truncate">
-              {c.title}
-            </span>
+            <button
+              onClick={() => onSelect(c.id)}
+              className="flex-1 min-w-0 flex items-center text-left"
+            >
+              <span className="flex-1 min-w-0 text-[13px] text-[var(--text-body)] truncate">
+                {c.title}
+              </span>
+            </button>
 
-            <span className="text-[11px] text-[var(--text-faint)] shrink-0">
+            <span className="text-[11px] text-[var(--text-faint)] shrink-0 group-hover:hidden">
               {c.time}
             </span>
-          </button>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(c.id);
+              }}
+              title="Delete chat"
+              className="hidden group-hover:flex shrink-0 w-6 h-6 rounded-md items-center justify-center text-[var(--text-faint)] hover:text-[var(--error)] hover:bg-[var(--surface-1)] transition-colors"
+            >
+              <Trash2 size={14} strokeWidth={1.75} />
+            </button>
+          </div>
         ))}
       </div>
 
@@ -676,7 +690,7 @@ function Composer({ onSend, disabled, isStreaming, onStop }) {
                 {isListening ? <MicOff size={17} strokeWidth={1.75} /> : <Mic size={17} strokeWidth={1.75} />}
               </button>
               
-              
+            
             </div>
             {isStreaming ? (
               <button onClick={onStop} title="Stop generating" className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center bg-[var(--send-bg)] text-[var(--send-text)] transition-colors">
@@ -739,6 +753,23 @@ async function sendFeedback({ messageId, userId, feedback, signal }) {
     }
     const status = error.response?.status;
     throw new Error(`Feedback request failed${status ? ` (${status})` : ""}`);
+  }
+}
+
+// Deletes a conversation (and its messages) on the backend.
+async function sendDeleteConversation({ conversationId, userId, signal }) {
+  try {
+    const response = await axios.delete(
+      `http://localhost:5000/api/chat/${conversationId}`,
+      { data: { userId }, signal }
+    );
+    return response.data;
+  } catch (error) {
+    if (axios.isCancel(error) || error.name === "CanceledError") {
+      throw error;
+    }
+    const status = error.response?.status;
+    throw new Error(`Delete request failed${status ? ` (${status})` : ""}`);
   }
 }
 
@@ -898,6 +929,35 @@ export default function Home_Page() {
     }
   };
 
+  // Deletes a chat from the Recent list. Optimistically removes it (and
+  // clears it as the active conversation if needed), then calls the
+  // backend; restores it at its original position on failure.
+  const handleDeleteConversation = async (conversationId) => {
+    if (!user) return;
+
+    const index = conversations.findIndex((c) => c.id === conversationId);
+    if (index === -1) return;
+    const removed = conversations[index];
+
+    setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+    if (activeId === conversationId) {
+      setActiveId(null);
+      setError(null);
+    }
+
+    try {
+      await sendDeleteConversation({ conversationId, userId: user.id });
+    } catch (err) {
+      // rollback on failure — put it back where it was
+      setConversations((prev) => {
+        const next = [...prev];
+        next.splice(index, 0, removed);
+        return next;
+      });
+      setError("Couldn't delete that chat. Please try again.");
+    }
+  };
+
   return (
     <div
       className={`w-full h-screen ${theme === "dark" ? "theme-dark" : "theme-light"} bg-[var(--bg-page)] text-[var(--text-body)] flex font-sans overflow-hidden relative transition-colors duration-300`}
@@ -910,6 +970,7 @@ export default function Home_Page() {
         activeId={activeId}
         onSelect={handleSelect}
         onNewChat={handleNewChat}
+        onDelete={handleDeleteConversation}
       />
 
       <div
